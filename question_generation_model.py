@@ -15,7 +15,6 @@ import re
 sys.path.append("./")
 sys.path.append("../")
 
-import boto3
 import os
 
 import requests
@@ -25,15 +24,13 @@ from cluster import cluster_texts
 from bert_layer import BertLayer, preprocess_bert_input
 from elmo_layer import ELMoEmbedding#, ElmoEmbeddingLayer
 
-from botocore.client import Config
-
 from PIL import Image
 from io import BytesIO
 from numpy import array
 import numpy as np
 import tensorflow
 
-import tensorflow.keras.layers as layers
+from tensorflow.keras import layers
 from tensorflow.keras.callbacks import EarlyStopping, ModelCheckpoint, LambdaCallback
 from tensorflow.keras.optimizers import Adam, RMSprop, SGD
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -42,22 +39,11 @@ from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.layers import Lambda, Layer, Input, Dense, Embedding, Dropout, LSTM, Concatenate, Add, Bidirectional
 from tensorflow.keras.models import Model, load_model
 
-from tensorflow.keras import backend as K
 # If running ELMO, the below need to be imported
 # otherwise import the two lines above
 # from keras.optimizers import Adam
 # from keras.models import Model, load_model
 # from keras.layers import Lambda, Layer, Input, Dense, Embedding, Dropout, LSTM, Concatenate, Add, Bidirectional
-
-try:
-    import turibolt as bolt
-except:
-    print('Running on local')
-
-mcqueen_url = "http://store-test.blobstore.apple.com"
-mcqueen_region_name = "store-test"
-mcqueen_access_key = "MKIAXRQON2I79WCA4Q19"
-mcqueen_secret_key = "C9ED2E4ABA42DD317E498C391A9AD989099C6E9018DD68508A232738719A915B"
 
 
 class QuestionGenerationModel:
@@ -80,13 +66,7 @@ class QuestionGenerationModel:
         self.model = None
         self.tokenizer = None
         self.input_shape = 0
-        self.s3 = boto3.resource(service_name='s3',
-                                 endpoint_url=mcqueen_url,
-                                 region_name=mcqueen_region_name,
-                                 aws_access_key_id=mcqueen_access_key,
-                                 aws_secret_access_key=mcqueen_secret_key,
-                                 config=Config(s3={'addressing_style': 'path', 'signature_version': 's3'}))
-
+        
     def load_embeddings(self):
         """
         Load Glove vectors
@@ -113,8 +93,7 @@ class QuestionGenerationModel:
             if word == '<START>' or word == '<END>':
                 embedding_vector = np.random.rand(self.embedding_dim)
 
-            if embedding_vector is not None:
-
+            if embedding_vector is not None and len(embedding_vector) > 0:
                 embedding_matrix[i] = embedding_vector
             else:
                 # Words not found in the embedding index will be all zeros
@@ -129,9 +108,9 @@ class QuestionGenerationModel:
         """
 
         # image feature
-        inputs1 = layers.Input(shape=(self.input_shape,))
+        inputs1 = Input(shape=(self.input_shape,))
         fe1 = Dropout(self.dropout)(inputs1)
-        fe2 = layers.Dense(self.hidden_units, activation='relu')(fe1)
+        fe2 = Dense(self.hidden_units, activation='relu')(fe1)
 
         # partial question sequence model
         inputs2 = Input(shape=(self.datasets.max_question_len,))
@@ -145,10 +124,9 @@ class QuestionGenerationModel:
 
         # decoder (feed forward) model
         decoder1 = Add()([fe2, question_seq_model])
-        # keras.layers.Add()([x1, x2])
 
-        decoder2 = layers.Dense(self.hidden_units, activation='relu')(decoder1)
-        outputs = layers.Dense(self.vocab_size, activation='softmax')(decoder2)
+        decoder2 = Dense(self.hidden_units, activation='relu')(decoder1)
+        outputs = Dense(self.vocab_size, activation='softmax')(decoder2)
 
         # merge the two input models
         model = Model(inputs=[inputs1, inputs2], outputs=outputs)
@@ -194,7 +172,6 @@ class QuestionGenerationModel:
 
         # decoder (feed forward) model
         decoder1 = Add()([fe2, question_seq_model, keyword_seq_model])
-        # keras.layers.Add()([x1, x2])
 
         decoder2 = layers.Dense(self.hidden_units, activation='relu')(decoder1)
         outputs = layers.Dense(self.vocab_size, activation='softmax')(decoder2)
@@ -243,7 +220,6 @@ class QuestionGenerationModel:
         # decoder (feed forward) model
         decoder1 = Add()([fe2, question_seq_model])
         self.logger.info('Building elmo model 4')
-        # keras.layers.Add()([x1, x2])
 
         decoder2 = layers.Dense(self.hidden_units, activation='relu')(decoder1)
         ge1 = Dropout(self.dropout)(decoder2)
@@ -286,7 +262,6 @@ class QuestionGenerationModel:
 
         # decoder (feed forward) model
         decoder1 = Add()([fe2, question_seq_model])
-        # keras.layers.Add()([x1, x2])
 
         decoder2 = layers.Dense(self.hidden_units, activation='relu')(decoder1)
         outputs = layers.Dense(self.vocab_size, activation='softmax')(decoder2)
@@ -665,122 +640,114 @@ class QuestionGenerationModel:
         self.logger.info('Inventiveness: %s' % str(len(unique_questions_not_seen_training_data) / len(candidates)))
         return [final_candidate], candidates
 
-    def generate_batch(self, batch_size, graph, id_question_dict, id_imagefeat_dict, id_keyword_dict=None, shuffle=True):
+    def generate_batch(self, batch_size, id_question_dict, id_imagefeat_dict, id_keyword_dict=None, shuffle=True):
         """
         Generator function resposible for generating batches during training
 
         :param batch_size: Batch size to be used
-        :param graph: Tensorflow graph
         :param id_question_dict: Dict with image id as key and question list as value
         :param id_imagefeat_dict: Dict with image id as key and image features as value
         :param id_keyword_dict: Dict with image id as key and keyword as value
         :param shuffle: If shuffle is true, randomly shuffle the image ids
         :return:
         """
-        with graph.as_default():
 
-            while True:
-                image_ids = list(id_question_dict.keys())
-                image_ids = [id for id in image_ids if id in id_imagefeat_dict]
-                num_samples = len(image_ids)
+        while True:
+            image_ids = list(id_question_dict.keys())
+            image_ids = [id for id in image_ids if id in id_imagefeat_dict]
+            num_samples = len(image_ids)
 
-                if shuffle:
-                    random.shuffle(image_ids)
+            if shuffle:
+                random.shuffle(image_ids)
 
-                # Get index to start each batch:
-                # [0, batch_size, 2*batch_size, ..., max multiple of batch_size <= num_samples]
-                for offset in range(0, num_samples, batch_size):
-                    X1 = list()
-                    X2 = list()
-                    X3 = list()
-                    Y = list()
-                    bert_label = list()
-                    # Get the samples you'll use in this batch
-                    batch_samples = image_ids[offset:offset + batch_size]
-                    for image_id in batch_samples:
-                        try:
-                            image_feature = id_imagefeat_dict[image_id]
-                            if image_feature is None:
-                                self.logger.debug('Image has no feature %s' % image_id)
-                                continue
-                        except:
-                            self.logger.error('Image %s not found' % image_id)
+            # Get index to start each batch:
+            # [0, batch_size, 2*batch_size, ..., max multiple of batch_size <= num_samples]
+            for offset in range(0, num_samples, batch_size):
+                X1 = list()
+                X2 = list()
+                X3 = list()
+                Y = list()
+                bert_label = list()
+                # Get the samples you'll use in this batch
+                batch_samples = image_ids[offset:offset + batch_size]
+                for image_id in batch_samples:
+                    try:
+                        image_feature = id_imagefeat_dict[image_id]
+                        if image_feature is None:
+                            self.logger.debug('Image has no feature %s' % image_id)
                             continue
+                    except:
+                        self.logger.error('Image %s not found' % image_id)
+                        continue
 
-                        try:
-                            keyword = id_keyword_dict[image_id]
-                        except:
-                            keyword = " "
+                    try:
+                        keyword = id_keyword_dict[image_id]
+                    except:
+                        keyword = " "
 
-                        x1 = image_feature
-                        image_questions = id_question_dict[image_id]
+                    x1 = image_feature
+                    image_questions = id_question_dict[image_id]
 
-                        for image_question in image_questions:
-                            token_seq = [self.datasets.word_to_idx[word] for word in image_question.split(' ') if
-                                         word in self.datasets.word_to_idx]
+                    for image_question in image_questions:
+                        token_seq = [self.datasets.word_to_idx[word] for word in image_question.split(' ') if
+                                     word in self.datasets.word_to_idx]
 
-                            for i in range(1, len(token_seq)):
-                                in_seq, out_seq = token_seq[:i], token_seq[i]
+                        for i in range(1, len(token_seq)):
+                            in_seq, out_seq = token_seq[:i], token_seq[i]
 
-                                bert_label.append(out_seq)
-                                y = to_categorical([out_seq], num_classes=self.vocab_size)[0]
-                                Y.append(y)
+                            bert_label.append(out_seq)
+                            y = to_categorical([out_seq], num_classes=self.vocab_size)[0]
+                            Y.append(y)
 
-                                X1.append(x1)
-                                if self.datasets.use_keyword:
-                                    x2_glove = pad_sequences([in_seq], maxlen=self.datasets.max_question_len, padding='post')[0]
-                                    X2.append(x2_glove)
+                            X1.append(x1)
+                            if self.datasets.use_keyword:
+                                x2_glove = pad_sequences([in_seq], maxlen=self.datasets.max_question_len, padding='post')[0]
+                                X2.append(x2_glove)
 
-                                    keyword_token_seq = [self.datasets.word_to_idx[word] for word in keyword.split(' ') if
-                                                        word in self.datasets.word_to_idx]
-                                    keyword_tokens = pad_sequences([keyword_token_seq], maxlen=self.datasets.max_keyword_len, padding='post')[0]
-                                    X3.append(keyword_tokens)
-                                elif 'glove' in self.datasets.embedding_file:
-                                    x2_glove = pad_sequences([in_seq], maxlen=self.datasets.max_question_len, padding='post')[0]
-                                    X2.append(x2_glove)
-                                # Input format for ELMO and Bert
-                                elif 'elmo' in self.datasets.embedding_file:
-                                    x2_elmo = ' '.join([self.datasets.idx_to_word[idx] for idx in in_seq[1:]])
-                                    x2_elmo = self.cleanText(x2_elmo)
-                                    X2.append([x2_elmo])
-                                # Input format for ELMO and Bert
-                                elif 'bert' in self.datasets.embedding_file:
-                                    x2_bert = ' '.join([self.datasets.idx_to_word[idx] for idx in in_seq[1:]])
-                                    x2_bert = self.cleanText(x2_bert)
-                                    X2.append([x2_bert])
+                                keyword_token_seq = [self.datasets.word_to_idx[word] for word in keyword.split(' ') if
+                                                    word in self.datasets.word_to_idx]
+                                keyword_tokens = pad_sequences([keyword_token_seq], maxlen=self.datasets.max_keyword_len, padding='post')[0]
+                                X3.append(keyword_tokens)
+                            elif 'glove' in self.datasets.embedding_file:
+                                x2_glove = pad_sequences([in_seq], maxlen=self.datasets.max_question_len, padding='post')[0]
+                                X2.append(x2_glove)
+                            # Input format for ELMO and Bert
+                            elif 'elmo' in self.datasets.embedding_file:
+                                x2_elmo = ' '.join([self.datasets.idx_to_word[idx] for idx in in_seq[1:]])
+                                x2_elmo = self.cleanText(x2_elmo)
+                                X2.append([x2_elmo])
+                            # Input format for ELMO and Bert
+                            elif 'bert' in self.datasets.embedding_file:
+                                x2_bert = ' '.join([self.datasets.idx_to_word[idx] for idx in in_seq[1:]])
+                                x2_bert = self.cleanText(x2_bert)
+                                X2.append([x2_bert])
 
-                    if self.datasets.use_keyword:
-                        yield [[array(X1), array(X2), array(X3)], array(Y)]
-                    # Bert input is slightly different from the rest
-                    elif 'bert' in self.datasets.embedding_file:
-                        input_ids, input_masks, segment_ids, labels = preprocess_bert_input(X2,
-                                                                                            bert_label,
-                                                                                            self.datasets.max_question_len,
-                                                                                            self.tokenizer,
-                                                                                            self.vocab_size)
-                        yield [[array(X1), array(input_ids), array(input_masks), array(segment_ids)], array(labels)]
-                    else:
-                        yield [[array(X1), array(X2)], array(Y)]
+                if self.datasets.use_keyword:
+                    print ('Chhavi', array(X1).shape, array(X2).shape, array(X3).shape, array(Y).shape)
+                    yield [[array(X1), array(X2), array(X3)], array(Y)]
+                # Bert input is slightly different from the rest
+                elif 'bert' in self.datasets.embedding_file:
+                    input_ids, input_masks, segment_ids, labels = preprocess_bert_input(X2,
+                                                                                        bert_label,
+                                                                                        self.datasets.max_question_len,
+                                                                                        self.tokenizer,
+                                                                                        self.vocab_size)
+                    yield [[array(X1), array(input_ids), array(input_masks), array(segment_ids)], array(labels)]
+                else:
+                    print ('Ashi', array(X1).shape, array(X2).shape, array(Y).shape)
+                    yield [[array(X1), array(X2)], array(Y)]
 
-    def train_model(self, model, graph, model_dir, epoch, batch_size, decoder_algorithm, beam_size, sess):
+    def train_model(self, model, model_dir, epoch, batch_size, decoder_algorithm, beam_size):
         """
         Training function
         :param model: model definition
-        :param graph: Tensorflow graph
         :param model_dir: Directory where model is saved
         :param epoch: Number of epochs for training
         :param batch_size: Batch size
         :param decoder_algorithm: Decoder algorithm to be used with model: greedy, simple beam search or diverse beam search
         :param beam_size: Beam size to be used for decoding
-        :param sess: Tensorflow session
         :return:
         """
-
-        report_metric_on_epoch_end = LambdaCallback(
-            on_epoch_end=lambda epoch, logs: bolt.send_metrics({
-                                                                'train_accuracy': logs['acc'],
-                                                                'train_loss': logs['loss']}, iteration=epoch)
-        )
 
         #
         # Some functions are commented out to increase training speed
@@ -795,7 +762,6 @@ class QuestionGenerationModel:
         self.logger.info('Train steps %s' % steps)
         self.logger.info('Validation steps %s' % val_steps)
         generator = self.generate_batch(batch_size,
-                                        graph,
                                         self.datasets.train_image_id_questions_dict,
                                         self.datasets.train_image_id_imagefeat_dict,
                                         self.datasets.train_image_id_keyword_dict)
@@ -815,18 +781,16 @@ class QuestionGenerationModel:
         for no_epoch in range(epoch):
             self.logger.info('\n'*5)
             self.logger.info(no_epoch)
-
-            history = model.fit_generator(generator,
-                                          steps_per_epoch=steps,
+            x_train, y_train = next(generator)
+            history = model.fit(x_train, y_train,
                                           epochs=1,
-                                          verbose=2,
-                                          callbacks=[report_metric_on_epoch_end])
+                                          verbose=2)
             # history = model.fit_generator(generator, validation_generator=val_generator,
             #                               steps_per_epoch=steps,
             #                               val_steps = val_steps
             #                               epochs=1,
             #                               verbose=2,
-            #                               callbacks=[report_metric_on_epoch_end, checkpoint. es])
+            #                               callbacks=[checkpoint. es])
 
             model_file_name = os.path.join(model_dir, 'model_' + str(no_epoch) + '.h5')
             self.logger.info('Model saved at %s' % model_file_name)
@@ -840,10 +804,10 @@ class QuestionGenerationModel:
 
                 while test_img_count < test_img_count_condition:
 
-                    sess.run(tensorflow.local_variables_initializer())
-                    sess.run(tensorflow.global_variables_initializer())
-                    sess.run(tensorflow.tables_initializer())
-                    K.set_session(sess)
+                    # sess.run(tensorflow.local_variables_initializer())
+                    # sess.run(tensorflow.global_variables_initializer())
+                    # sess.run(tensorflow.tables_initializer())
+                    # K.set_session(sess)
 
                     id = sys_random.choice(list(self.datasets.test_image_id_url_dict.keys()))
                     test_image_url = self.datasets.test_image_id_url_dict[id]
@@ -858,8 +822,6 @@ class QuestionGenerationModel:
 
                     test_img_count += 1
 
-        # upload model to McQueen
-        # self.datasets.store_data_to_mcqueen(model_bucket_name, filepath)
         return epoch
 
     def test_model(self, test_image_url, model, decoder_algorithm, beam_size, keyword=None):

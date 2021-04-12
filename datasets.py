@@ -29,20 +29,10 @@ from tensorflow.keras.applications.resnet50 import preprocess_input as res_net_p
 # from tensorflow.keras.applications.inception_v3 import preprocess_input as inception_net_preprocess
 from tensorflow.keras.applications.densenet import preprocess_input as dense_net_preprocess
 
-
 import string
 
 import warnings
 warnings.filterwarnings(action='once')
-
-import boto3
-
-from botocore.client import Config
-
-mcqueen_url = "http://store-test.blobstore.apple.com"
-mcqueen_region_name = "store-test"
-mcqueen_access_key = "MKIAXRQON2I79WCA4Q19"
-mcqueen_secret_key = "C9ED2E4ABA42DD317E498C391A9AD989099C6E9018DD68508A232738719A915B"
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -56,33 +46,26 @@ class Datasets:
 
     def __init__(self, train_file_name, validation_file_name, test_file_name, embedding_file_name, max_train,
                  image_encoding_algo, use_keyword=False, build_vocab_dev=True):
-
-        self.s3 = boto3.resource(service_name='s3',
-                                 endpoint_url=mcqueen_url,
-                                 region_name=mcqueen_region_name,
-                                 aws_access_key_id=mcqueen_access_key,
-                                 aws_secret_access_key=mcqueen_secret_key,
-                                 config=Config(s3={'addressing_style': 'path', 'signature_version': 's3'}))
-
+        
         bucket_name = 'vqg-data'
         self.image_encoding_algo = image_encoding_algo
         self.build_vocab_dev = build_vocab_dev
 
         if not os.path.exists(train_file_name):
-            logger.info("Downloading training data to %s" % train_file_name)
-            self.store_data_from_mcqueen(bucket_name, train_file_name.split('/')[-1], train_file_name)
+            logger.info("Download training data to %s" % train_file_name)
+            exit(0)
 
         if not os.path.exists(validation_file_name):
-            logger.info("Downloading validation data to %s" % validation_file_name)
-            self.store_data_from_mcqueen(bucket_name, validation_file_name.split('/')[-1], validation_file_name)
+            logger.info("Download validation data to %s" % validation_file_name)
+            exit(0)
 
         if not os.path.exists(test_file_name):
-            logger.info("Downloading testing data to %s" % test_file_name)
-            self.store_data_from_mcqueen(bucket_name, test_file_name.split('/')[-1], test_file_name)
+            logger.info("Download testing data to %s" % test_file_name)
+            exit(0)
 
         if 'glove' in embedding_file_name and not os.path.exists(embedding_file_name):
-            logger.info("Downloading embedding file from %s" % embedding_file_name)
-            self.store_data_from_mcqueen('glov_data', embedding_file_name.split('/')[-1], embedding_file_name)
+            logger.info("Download embedding file to %s" % embedding_file_name)
+            exit(0)
 
         self.train_file = train_file_name
         self.validation_file = validation_file_name
@@ -135,51 +118,6 @@ class Datasets:
 
         self.build_vocabulary()
 
-    def store_data_from_mcqueen(self, bucket_name, key_name, file_name):
-        """
-        Downloads data from mcqueen
-        :param bucket_name: Name of bucket on mcqueen
-        :param key_name: Key name on mcqueen
-        :param file_name: Name of file to be stored
-        :return:
-        """
-
-        s3object = self.s3.Object(bucket_name=bucket_name, key=key_name).get()
-        data = s3object['Body'].read().decode('utf-8')
-
-        with open(file_name, 'w', encoding='utf-8') as file:
-            file.write(data)
-
-    def store_binary_data_from_mcqueen(self, bucket_name, key_name, file_name):
-        """
-        Downloads binary from mcqueen. We use this when the function above fails in case of binary encoded files.
-        :param bucket_name: Name of bucket on mcqueen
-        :param key_name: Key name on mcqueen
-        :param file_name: Name of file to be stored
-        :return:
-        """
-        try:
-            self.s3.Bucket(bucket_name).download_file(key_name, file_name)
-
-        except:
-            logger.error('Error trying another style')
-            with open(file_name, 'wb') as f:
-                self.s3.download_fileobj(Filename=f, Key=key_name, Bucket=bucket_name)
-
-    def store_data_to_mcqueen(self, model_bucket_name, key_name, file_name):
-        """
-        Uploads data to mcqueen
-        :param bucket_name: Name of bucket on mcqueen
-        :param key_name: Key name on mcqueen
-        :param file_name: Name of file to be uploaded
-        :return:
-        """
-
-        if self.s3.Bucket(model_bucket_name) not in self.s3.buckets.all():
-            bucket = self.s3.create_bucket(Bucket=model_bucket_name)
-
-        self.s3.Bucket(model_bucket_name).upload_file(file_name, key_name)
-
     def get_processed_fields(self, line, file_name, build_image_feature = False):
         """
         This function splits a record into id and questions. It also extracts image features from a given url
@@ -222,6 +160,7 @@ class Datasets:
             else:
                 # Image feature doesnt exist in dictionary so build it
                 try:
+                    # TODO: Download image features given flickr id
                     logger.debug('Building feature for image: %s' % image_url)
                     image_feature = self.get_processed_image_features(image_url)
                 except:

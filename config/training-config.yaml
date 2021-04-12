@@ -1,0 +1,80 @@
+name: 'Visual Question Generation apple glove densenet'
+description: 'Example configuration.'
+# Configurations of different image encoding strategies under parameters.model_parameters.image_encoder.algorithm and
+#  parameters.model_parameters.image_encoder.image_embedding_dim
+# 'MobileNet' - 62720
+# 'VGG19' - 25088
+# 'ResNet' - 100352
+# 'Inception' - 51200
+# 'DenseNet' - 94080
+
+# Configurations of different allowed datasets under parameters.datasets.name:
+#  'coco', 'apple', 'flickr', 'bing'
+
+# Configurations of different decoding strategies under parameters.model_parameters.decoder.algorithm
+# 'greedy', 'sbs' or 'dbs'
+# beam_size: 5, change if necessary
+
+# Configurations of different embedding files:
+# 'bert' for BERT
+# 'data/glove.6B.200d.txt' for GloVe
+
+# Configuration of LSTM text encoder:
+# hidden_dim: Use 64 for BERT, otherwise it goes OOM
+# hidden_dim: Use 256 with GloVe, it gives better results
+# dropout: 0.5, change if necessary
+
+# Configurations for training parameters:
+# Batch size: 4, change if necessary [BERT goes OOM for large batch size]
+# Epoch: 200, Change if necessary
+
+parameters:
+  is_training: 'YES'
+  logging_level: 'i'
+  datasets:
+    name: 'apple'
+    # Used to limit image count for which features are extracted. Use small number for debugging purposes.
+    # Once the code is running end to end, make this value large ~3000
+    max_train_size: 1
+    # To use apple data
+    train_file: "data/apple/apple_train_all_keyword.csv"
+    validation_file: "data/apple/apple_dev_all_keyword.csv"
+    test_file: "data/apple/apple_test_all_keyword.csv"
+    embedding_file: "data/glove_words.txt"
+#    embedding_file: "bert"
+    keyword: 'NO'
+
+  model_parameters:
+    image_encoder:
+        algorithm: 'DenseNet'
+        image_width: 224
+        image_height: 224
+        image_embedding_dim: 94080
+
+    text_encoder:
+        algorithm: 'LSTM'
+        embedding_dim: 200
+        hidden_dim: 64
+        dropout: 0.5
+
+    decoder:
+        algorithm: 'greedy'
+        hidden_dim: 256
+        beam_size: 5
+
+    optimizer:
+        algorithm: 'Adam'
+        lr: 0.0001
+        beta_1: 0.9
+        beta_2: 0.999
+
+    loss_function: 'categorical_crossentropy'
+
+    training:
+        batch_size: 4
+        epoch: 200
+
+    inference:
+        model_file: 'apple/bert/densenet/model_121.h5' # 'apple/glove/densenet/keyword/model_199.h5'
+        user_input: 'NO'
+

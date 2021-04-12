@@ -14,13 +14,15 @@ from question_generation_model import QuestionGenerationModel
 from commons_pkg.commons_utils import load_config
 from evaluation_pkg.evaluate import run_evaluation
 from pprint import pprint
-from tensorflow.keras import backend as K
 import argparse
 import csv
 import logging
 import os
 import pickle
+# import tensorflow.compat.v1 as tensorflow
 import tensorflow
+from tensorflow.keras import backend as K
+# tensorflow.disable_v2_behavior()
 import subprocess
 import sys
 
@@ -28,9 +30,6 @@ os.environ['TFHUB_CACHE_DIR'] = os.path.join(os.getcwd(), 'misc')
 from bert_layer import create_tokenizer_from_hub_module, initialize_vars
 sys.path.append("./")
 sys.path.append("../")
-
-# # Initialize session
-sess = tensorflow.Session()
 
 
 def parse_arguments():
@@ -42,7 +41,7 @@ def parse_arguments():
         description='Run modeling tasks on visual question geenration task')
     parser.add_argument('-model_dir', type=str, default='model',
                         help='Directory to store saved model files')
-    parser.add_argument('-c', type=str, default='bolt/config.yaml',
+    parser.add_argument('-c', type=str, default='config/training-config.yaml',
                         help='Config file path')
 
     args = parser.parse_args()
@@ -88,7 +87,7 @@ def load_model(question_generator):
     elif 'bert' in question_generator.datasets.embedding_file:
         bert_path = "https://tfhub.dev/google/bert_uncased_L-12_H-768_A-12/1"
         # Instantiate tokenizer
-        question_generator.tokenizer = create_tokenizer_from_hub_module(bert_path, sess)
+        question_generator.tokenizer = create_tokenizer_from_hub_module(bert_path)
         model = question_generator.build_bert_model()
     else:
         logging.error('Embedding model not found')
@@ -186,7 +185,6 @@ if __name__ == "__main__":
 
     if save:
         save_obj(datasets.test_image_id_imagefeat_dict, test_imagefeat_dict_name)
-    # K.set_session(sess)
     if is_training == 'YES':
 
         if os.path.exists(train_imagefeat_dict_name):
@@ -208,31 +206,29 @@ if __name__ == "__main__":
         count = 0
         vocab_size = len(datasets.vocabulary)
 
-        graph = tensorflow.get_default_graph()
+        # graph = tensorflow.get_default_graph()
 
         logger.info("Training size: %s" % str(len(datasets.train_image_id_questions_dict)))
         logger.info("Validation size: %s" % str(len(datasets.dev_image_id_questions_dict)))
 
-        sess.run(tensorflow.local_variables_initializer())
-        sess.run(tensorflow.global_variables_initializer())
-        sess.run(tensorflow.tables_initializer())
-        K.set_session(sess)
+        # tensorflow.local_variables_initializer()
+        # tensorflow.global_variables_initializer()
+        # tensorflow.tables_initializer()
+        # K.set_session(sess)
         # Train the model
         last_epoch = question_generator.train_model(model,
-                                       graph,
                                        args.model_dir,
                                        epoch=epoch,
                                        batch_size=batch_size,
                                        decoder_algorithm=decoder_algorithm,
-                                       beam_size=beam_size,
-                                       sess=sess)
+                                       beam_size=beam_size)
         model_file_name = 'model_' + str(last_epoch - 1) + '.h5'
 
     # Perform inference
     path = os.path.join(args.model_dir, model_file_name)
     if not os.path.exists(path):
-        logger.info('Downloading {}  file'.format(model_file_name))
-        datasets.store_binary_data_from_mcqueen('experimental_models', model_file_name, path)
+        logger.info('Download {} file. Inference not possible'.format(model_file_name))
+        exit(0)
     else:
         logger.info('Model {} exists'.format(model_file_name))
 
@@ -240,14 +236,11 @@ if __name__ == "__main__":
         new_model = tensorflow.keras.models.load_model(path)
         new_model.load_weights(path)
         initialize_vars(sess)
-
     elif 'elmo' in datasets.embedding_file:
         K.set_session(sess)
         new_model = tensorflow.keras.models.load_model(path)
         new_model.load_weights(path)
         initialize_vars(sess)
-
-
     else:
         new_model = load_model(question_generator)
         new_model.load_weights(path)

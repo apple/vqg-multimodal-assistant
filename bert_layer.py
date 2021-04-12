@@ -2,21 +2,22 @@
 # For licensing see accompanying LICENSE.txt file.
 # Copyright (C) 2021 Apple Inc. All Rights Reserved.
 #
-
-
 """
 This file contains Bert Layer class and processing functions related to Bert Layer class
 """
 import tensorflow as tf
+import pandas as pd
 import tensorflow_hub as hub
 import os
+import re
 import numpy as np
 
 from bert.tokenization import FullTokenizer
-from keras import backend as K
+from tensorflow.keras import backend as K
 from sklearn import preprocessing
 
 os.environ['TFHUB_CACHE_DIR'] = os.path.join(os.getcwd(), 'misc')
+
 
 
 class PaddingInputExample(object):
@@ -54,7 +55,7 @@ def create_tokenizer_from_hub_module(bert_path, sess):
     """Get the vocab file and casing info from the Hub module."""
     bert_module = hub.Module(bert_path)
     tokenization_info = bert_module(signature="tokenization_info", as_dict=True)
-    vocab_file, do_lower_case = sess.run(
+    vocab_file, do_lower_case = tf.print(
         [tokenization_info["vocab_file"], tokenization_info["do_lower_case"]]
     )
 
@@ -127,10 +128,10 @@ def convert_examples_to_features(tokenizer, examples, max_seq_length=256):
 
 
 def initialize_vars(sess):
-    sess.run(tf.local_variables_initializer())
-    sess.run(tf.global_variables_initializer())
-    sess.run(tf.tables_initializer())
-    K.set_session(sess)
+    tf.compat.v1.local_variables_initializer()
+    tf.compat.v1.global_variables_initializer()
+    tf.compat.v1.tables_initializer()
+    # K.set_session(sess)
 
 
 def convert_text_to_examples(texts, labels):
