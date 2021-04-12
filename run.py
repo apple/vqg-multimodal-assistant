@@ -1,3 +1,8 @@
+#
+# For licensing see accompanying LICENSE.txt file.
+# Copyright (C) 2021 Apple Inc. All Rights Reserved.
+#
+
 """
 Entry point code for modeling_pkg
 """

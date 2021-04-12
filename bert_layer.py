@@ -1,11 +1,15 @@
+#
+# For licensing see accompanying LICENSE.txt file.
+# Copyright (C) 2021 Apple Inc. All Rights Reserved.
+#
+
+
 """
 This file contains Bert Layer class and processing functions related to Bert Layer class
 """
 import tensorflow as tf
-import pandas as pd
 import tensorflow_hub as hub
 import os
-import re
 import numpy as np
 
 from bert.tokenization import FullTokenizer
@@ -13,7 +17,6 @@ from keras import backend as K
 from sklearn import preprocessing
 
 os.environ['TFHUB_CACHE_DIR'] = os.path.join(os.getcwd(), 'misc')
-
 
 
 class PaddingInputExample(object):
