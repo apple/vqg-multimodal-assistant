@@ -47,7 +47,6 @@ class Datasets:
     def __init__(self, train_file_name, validation_file_name, test_file_name, embedding_file_name, max_train,
                  image_encoding_algo, use_keyword=False, build_vocab_dev=True):
         
-        bucket_name = 'vqg-data'
         self.image_encoding_algo = image_encoding_algo
         self.build_vocab_dev = build_vocab_dev
 
